@@ -1,8 +1,11 @@
 # Panos Toulis, ptoulis@fas.harvard.edu
 #
 # Object definitions. A "defs.R" file contains definitions of the objects and structures
-# throughout the R software project. This also includes CHECK_* 
-# functions to check whether the objects have the correct format.
+# throughout the R software project. Tries to emulate some OO-techniques.
+# For every "concept" or "object" X we have functions (unless very obvious)
+#   example.X() = creates an example object of class X 
+#   empty.X() = an "empty" object of class X
+#   CHECK_X(obj) = checks whether obj has the correct format X
 
 # We assume we have 1...N experimental units (e.g. individuals)
 # (0)  A "unit" is just the experimental unit (e.g. individual in a medical test)
@@ -32,6 +35,7 @@ empty.experiment <- function(num.units) {
   class(obj) <- "experiment"
   obj
 }
+
 empty.cii <- function() {
   experiment <- empty.experiment(0)
   graph <- graph.adjacency(matrix(0, nrow=0, ncol=0))
@@ -39,6 +43,7 @@ empty.cii <- function() {
   class(obj) <- "cii"
   obj
 }
+
 example.cii <- function() {
   args <- list()
   args$G <- watts.strogatz.game(dim=1, size=10, nei=2, p=0.3)
@@ -54,11 +59,13 @@ CHECK_experiment <- function(experiment) {
                attrs=c("Z", "exposed", "control", "can.control", "can.expose"),
                str="Checking experiment object")
 }
+
 CHECK_cii <- function(cii) {
   # Check whether this is valid cii object
   check.object(cii, class.name="cii", attrs=c("G", "Y", "k", "experiment"))
   CHECK_experiment(cii$experiment)
 }
+
 CHECK_cii_units <- function(cii, units) {
   CHECK_cii(cii)
   if (length(units) ==0) 
@@ -69,6 +76,7 @@ CHECK_cii_units <- function(cii, units) {
       stop(sprintf("Unit %d does not belong in cii object (only %d units)", unit, length(cii.units)))
   }  
 }
+
 CHECK_Z <- function(z.list) {
   if (length(z.list) == 0)
     stop("Empty assignment vector")
