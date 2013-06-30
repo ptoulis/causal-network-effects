@@ -1,6 +1,9 @@
 # Panos Toulis, ptoulis@fas.harvard.edu
 #
-# Object definitions. 
+# Object definitions. A "defs.R" file contains definitions of the objects and structures
+# throughout the R software project. This also includes CHECK_* 
+# functions to check whether the objects have the correct format.
+
 # We assume we have 1...N experimental units (e.g. individuals)
 # (0)  A "unit" is just the experimental unit (e.g. individual in a medical test)
 #      We assume we have 1...N units and each one is represented by an integer in that range.
