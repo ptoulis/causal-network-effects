@@ -1,12 +1,15 @@
 # Panos Toulis, ptoulis@fas.harvard.edu
 rm(list=ls()) ####  remove workspace stuff
 library(igraph)
-source("defs.R")
+library(logging)
+basicConfig()
+source("terminology.R")
+source("randomizations.R")
 init.cii  <- function(cii.args) {
   # Initializes the Causal Inference w/Interference object.
   # 
-  # Args: A <cii.args> object. See "defs.R"
-  # Returns: A <cii> object. See "defs.R"
+  # Args: A <cii.args> object. See "terminology"
+  # Returns: A <cii> object. See terminology"
   cii <- empty.cii()
   # 1. Set the graph
   cii$G = cii.args$G 
@@ -16,8 +19,9 @@ init.cii  <- function(cii.args) {
   cii$k = cii.args$k
   
   # 4. Update the "experiment" field (which are exposed, or can be etc)
-  cii$experiment <- empty.experiment(length(V(cii.args$G)))
-  cii <- post.assignment.update(cii) 
+  num.units = length(V(cii.args$G))
+  cii$experiment <- empty.experiment(num.units)
+  cii <- set.units.Z(cii, get.cii.units(cii), rep(NA, num.units))
   return(cii);
 }
 
@@ -50,6 +54,7 @@ post.assignment.update <- function(cii) {
                       str="Exposed and control groups should be disjoint")
   return(cii)
 }
+
 which.can.expose  <- function(cii) {
   # Calculates which units can be k-exposed in the <cii> object.
   #
@@ -123,7 +128,6 @@ cii.expose.unit <- function(cii, unit) {
   ## Check to see if v is in treated.
   if(!(unit %in% cii$experiment$can.expose))
     stop(sprintf("Error: Node %d cannot be k-exposed..", unit))
-  
   Ni <- get.unit.neighbors(cii, unit)
   Zni<- get.unit.Znei(cii, unit)  # get neighborhood assignment.
   Ni.nas <- Ni[which(is.na(Zni))]  # take the unassigned neighbors as a vector.
@@ -139,13 +143,12 @@ cii.expose.unit <- function(cii, unit) {
   assg <- k.ones.of.n(to.treat, size.nas)
   # Now change the Z assignment. 
   # Need to update can.expoase, can.control vector
-  cii <- set.units.Z(cii, Ni.nas, assg)
-  cii <- set.unit.Zi(cii, unit, 0)  
-  cii <- post.assignment.update(cii)
+  cii <- set.units.Z(cii, c(Ni.nas, unit), c(assg, 0))
   # Check whether all neighbors have been assigned.
   check.true((sum(is.na(get.unit.Znei(cii, unit)))==0), "All neighbors should be set")
   return(cii);
 }
+
 cii.control.unit <- function(cii, unit) {
   # Sets unit to be in k-control
   #
@@ -157,9 +160,7 @@ cii.control.unit <- function(cii, unit) {
   
   Ni <- get.unit.neighbors(cii, unit)
   assignment <- rep(0, length(Ni))  # set all neighbors to control(Zj=0)
-  cii <- set.units.Z(cii, Ni, assignment)
-  cii <- set.unit.Zi(cii, unit, 0)
-  cii <- post.assignment.update(cii)
+  cii <- set.units.Z(cii, c(Ni, unit), c(assignment, 0))
   # Check whether all neighbors are set to Zj=0
   check.lists.eq(get.unit.Znei(cii, unit), rep(0, length(Ni)), "All neighbors should be zero")
   return(cii);
@@ -197,11 +198,9 @@ get.unit.Zi <- function(cii, unit) {
   CHECK_cii_units(cii, unit)
   cii$experiment$Z[unit]
 }
+
 set.unit.Zi <- function(cii, unit, zi) {
-  CHECK_cii_units(cii, unit)
-  CHECK_Z(zi)
-  cii$experiment$Z[unit] <- zi;
-  return(cii)
+  set.units.Z(cii, c(unit), c(zi))
 }
 
 is.unit.exposed <- function(cii, unit) (unit %in% cii$experiment$exposed)
@@ -209,6 +208,16 @@ is.unit.control <- function(cii, unit) (unit %in% cii$experiment$control)
 is.unit.treated <- function(cii, unit) {
   zi <- get.unit.Zi(cii, unit)
   return(!is.na(zi) && zi==1)
+}
+
+get.cii.shared.neighbors <- function(cii) {
+  all.units = get.cii.units(cii)
+  which(sapply(all.units, function(i) is.shared.neighbor(cii, i)))
+}
+is.shared.neighbor <- function(cii, unit) {
+  member = sapply(get.cii.Vk(cii),
+                  function(i) unit %in% get.unit.neighbors(cii, i))
+  return (sum(member) > 1)
 }
 can.expose.unit <- function(cii, unit) (unit %in% cii$experiment$can.expose)
 can.control.unit <- function(cii, unit) (unit %in% cii$experiment$can.control)
@@ -219,9 +228,17 @@ get.units.Z <- function(cii, units) {
 }
 
 set.units.Z <- function(cii, units, Zs) {
-  CHECK_cii_units(cii, units)
   CHECK_Z(Zs)
+  current.Z <- get.units.Z(cii, units)
+  check.lists.eq(length(current.Z), length(Zs), str="equal-length assignment")
+  # which nodes are already assigned
+  assigned.index = which(!is.na(current.Z))
+  n = length(assigned.index)
+  check.lists.eq(current.Z[assigned.index],
+                 Zs[assigned.index],
+                 str="Respecting prior assignments")
   cii$experiment$Z[units] <- Zs;
+  cii <- post.assignment.update(cii)
   return(cii)
 }
 
@@ -236,13 +253,21 @@ get.unit.Znei = function(cii, unit) {
   return(get.units.Z(cii, Ni))
 }
 
-plot.cii <- function(cii) {
+plot.cii <- function(cii, layout=layout.circle) {
   # Plots the cii object. Different colors are used for the assignments.
   # blue=unassigned(NA), green=assigned, red=control
+  par(mar=rep(0, 4))
   all.units <- get.cii.units(cii)
   toCodes <- sapply(get.units.Z(cii, all.units), function(i) ifelse(is.na(i), 3, i+1))
   num.units <- length(all.units)
   V(cii$G)$color <- c("red", "green", "cyan")[toCodes];
-  plot.igraph(cii$G, layout=layout.circle,
-              vertex.size=floor(200/num.units))      ###  plot the graph
+  plot.igraph(cii$G, layout=layout,
+              vertex.size=floor(300/num.units))      ###  plot the graph
+}
+
+get.experiment.balance <- function(cii) {
+  n = length(get.cii.Vk(cii))
+  Nt = length(cii$experiment$exposed)
+  Nc = length(cii$experiment$control)
+  return (min(Nt, Nc) / (n/2))
 }

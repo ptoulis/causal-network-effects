@@ -80,8 +80,8 @@ check.true <- function(x, str="n/a") {
 }
 
 check.object <- function(x, class.name, attrs, str="n/a") {
-  check.strings.eq(class(x), class.name)
-  check.is.subset(names(x), attrs)
+  check.strings.eq(class(x), class.name, str=sprintf("%s/Class name check.", str))
+  check.is.subset(names(x), attrs, str=sprintf("%s/Object attributes check", str))
 }
 
 check.exception <- function(fn, args, str="n/a") {

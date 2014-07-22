@@ -26,7 +26,7 @@
 #      {G=<igraph object>, Y=function(), k, experiment=<experiment>}
 #      Y(i, Zni)=reponse of unit i when neighborhood has treatent Zni
 #      k=level of effects we are considering as integer. When a unit i is exposed
-#        to k-level effects, exactly k-neighbors are treated and the unit i is in control.
+#     to k-level effects, exactly k-neighbors are treated and the unit i is in control.
 # (3) "cii.args": Arguments to construct a <cii> object (as a list). See above for the arguments.
 source("tests.R")
 empty.experiment <- function(num.units) {
@@ -52,7 +52,24 @@ example.cii <- function() {
   cii <- init.cii(args)
   cii
 }
-
+candy.cii <- function(k) {
+  A = matrix(0, nrow=3*k+2, ncol=3*k+2); 
+  A[1, seq(3,2*k+2)] <- 1; 
+  A[2, seq(k+3, 3*k+2)]<-1; 
+  g <- graph.adjacency(A, mode="undirected")
+  args <- list(G=g, Y=function(i, Zni) {0}, k=k)
+  return (init.cii(args))
+}
+star.cii <- function(n) {
+  g = graph.star(n=n+1,center=1)
+  args <- list(G=g, Y=function(i, Zni) {0}, k=k)
+  return (init.cii(args))
+}
+small.world.cii <- function(n=20, k=3) {
+  g <- watts.strogatz.game(dim=1, size=n, nei=1, p=0.2);
+  args <- list(G=g, Y=function(i, Zni) {0}, k=k)
+  return (init.cii(args))
+}
 # CHECK_* functions make sure these objects have the correct specs
 CHECK_experiment <- function(experiment) {
   check.object(experiment, class.name="experiment",
@@ -62,7 +79,9 @@ CHECK_experiment <- function(experiment) {
 
 CHECK_cii <- function(cii) {
   # Check whether this is valid cii object
-  check.object(cii, class.name="cii", attrs=c("G", "Y", "k", "experiment"))
+  check.object(cii, class.name="cii",
+               attrs=c("G", "Y", "k", "experiment"),
+               str="Checking whether CII object is correct")
   CHECK_experiment(cii$experiment)
 }
 
@@ -85,4 +104,8 @@ CHECK_Z <- function(z.list) {
       stop("Assignment z has to be in {0,1}")
     }
   }
+}
+
+log.vector <- function(v, str) {
+  loginfo(sprintf("%s : %s", str, paste(v, collapse=", ")))
 }
