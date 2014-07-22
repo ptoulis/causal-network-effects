@@ -1,5 +1,6 @@
 # Panos Toulis, ptoulis@fas.harvard.edu
-# Unit-testing routines.
+# Unit-testing routines.. 
+
 
 throw.error <- function(str.many) {
   for (str in str.many) 
