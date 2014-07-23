@@ -88,12 +88,18 @@ sample.Yall <- function(types) {
   # 2. Sample   Y_i(1)  for females and singles.
   y$other[f.and.s, 2] <- rnorm(nFS, mean=3.75, sd=sqrt(2))
   
+  interference.effect = 0
+  primary.effects.male = 1.5
+  baseline.male = 0.6
+  mus = c(baseline.male, baseline.male + interference.effect, 
+          baseline.male + primary.effects.male,
+          baseline.male + primary.effects.male + interference.effect)
   for(j in 1:4) {
     # 3. Sample Y_i(z1, z2)  for the males. Note that no interference effect
     #      means Y_i(0, 1) ~ Y_i(0, 0) and Y_i(1, 0) ~ Y_i(1, 1)
     #      so that, in the alt notation, Yi(z=1) ~ Yi(z=2) and  Yi(z=3) ~ Yi(z=4)
     # Assume treatment effect 1.9-0.6 = 1.3
-    mu = ifelse(j <= 2, 0.6, 1.9)
+    mu = mus[j]
     y$males[m, j] <- rnorm(nM, mean=mu, sd=0.6)
   }
   return(y)
