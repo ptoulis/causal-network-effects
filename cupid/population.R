@@ -8,53 +8,62 @@ population.size <- function(pop) length(pop$obs$Z)
 population.all.units <- function(pop) 1:population.size(pop)
 
 population.check.units <- function(pop, units) {
+  # Check whether these are valid units.
   CHECK_MEMBER(units, population.all.units(pop))
 }
 
-# Basic access functions (to reduce list referncing notational clutter).
-population.treatment <- function(pop, units=population.all.units(pop)) {
-  # Get the Zobs vector (same as com)
-  population.check.units(pop, units)
-  pop$obs$Z[units]
+# Basic access functions (to reduce list-referencing notational clutter).
+population.treatment <- function(pop) {
+  # Returns the treatment vector(Z)
+  pop$obs$Z
 }
-population.types.obs <- function(pop, units=population.all.units(pop)) {
-  pop$obs$types[units]
+population.types.obs <- function(pop) {
+  pop$obs$types
 }
-population.types.com <- function(pop, units=population.all.units(pop)) {
-  pop$com$types[units]
+population.types.com <- function(pop) {
+  pop$com$types
 }
-population.Y.obs <- function(pop, units=population.all.units(pop)) {
+population.Y.obs <- function(pop) {
   # Gets the (sub)vector of the observed outcomes Y for the units.
-  population.check.units(pop, units)
   pop$obs$Y
 }
-population.Y.com <- function(pop, units=population.all.units(pop)) {
-  population.check.units(pop, units)
+population.Y.com <- function(pop) {
+  # Returns the entire
   pop$com$Yall
 }
 
 population.treatment.outcomes <- function(pop, z) {
   # Explicitly computes the outcomes for the specified treatment vector.
-  # Given the assignment vector (z) it will use Yall (complete PO)
+  # Given the assignment vector (z) it will use Yall (potential outcomes)
   # to return the Nx1 vector of observed outcomes on the units.
+  #
+  # Args: pop = population, z=Nx1 treatment vector
+  # Returns: Nx1 vector of Y outcomes.
+  #
   units = population.all.units(pop)
-  CHECK_EQ(length(z), length(units))
-  CHECK_MEMBER(z, c(0, 1))
+  N = length(units)
+  CHECK_EQ(length(z), length(units)) # make sure z has the correct length
+  CHECK_MEMBER(z, c(0, 1)) # check if treatment is binary
+  
   all.types = population.types.com(pop)
-  all.males = types.males(all.types)
-  m = intersect(units, all.males) # get the males in this group
+  males = types.males(all.types)
+  match.females = types.female.match(all.types, males)
+  other = setdiff(units, males)  # females and singles.
+  
+  # Will use linear indexing to access the elements of the matrix
+  # of PO using (r, c) where r=row positions, c=column positions.
+  male.c = 2 * z[males] + z[match.females] + 1 # from 1, 4
+  male.r = males
+  Lindex.male = male.r + N * (male.c-1)
+  other.c = z[other] + 1
+  other.r = other
+  Lindex.other = other.r + N * (other.c-1)
+  
+  y = rep(NA, N)
+  y[males] = pop$com$Yall$males[Lindex.male]
+  y[other] = pop$com$Yall$other[Lindex.other]
 
-  y = sapply(1:length(units), function(i) {
-    u = units[i]
-    z.u = z[i] # treatment of unit
-    if(u %in% m) {
-      uf = types.female.match(all.types, males=c(u))
-      ind = 2 * z.u + z[uf] + 1 # (0, 0) = 1,. (0, 1) = 2 , (1, 0) = 3..
-      return(pop$com$Yall$males[u, ind])
-    } else {
-      return(pop$com$Yall$other[u, z.u + 1])
-    }
-  })
+  CHECK_TRUE(sum(is.na(y))==0)
   return(y)
 }
 
@@ -74,28 +83,31 @@ sample.Yall <- function(types) {
   nFS = length(f.and.s)
   nM = length(m)
   # 1. Sample   Y_i(0)  for females and singles.
+  #   E(Y(1)-Y(0)) = 2.75
   y$other[f.and.s, 1] <- rnorm(nFS, mean=1, sd=1)
   # 2. Sample   Y_i(1)  for females and singles.
-  y$other[f.and.s, 2] <- rnorm(nFS, mean=2.75, sd=sqrt(2))
+  y$other[f.and.s, 2] <- rnorm(nFS, mean=3.75, sd=sqrt(2))
   
   for(j in 1:4) {
     # 3. Sample Y_i(z1, z2)  for the males. Note that no interference effect
     #      means Y_i(0, 1) ~ Y_i(0, 0) and Y_i(1, 0) ~ Y_i(1, 1)
     #      so that, in the alt notation, Yi(z=1) ~ Yi(z=2) and  Yi(z=3) ~ Yi(z=4)
+    # Assume treatment effect 1.9-0.6 = 1.3
     mu = ifelse(j <= 2, 0.6, 1.9)
-    y$males[m, j] <- rnorm(nM, mean=mu, sd=1)
+    y$males[m, j] <- rnorm(nM, mean=mu, sd=0.6)
   }
   return(y)
 }
 
 sample.z <- function(nunits) {
-  CHECK_TRUE(nunits%%2==0)
+  CHECK_TRUE(nunits%%2==0, msg="Better to have even units")
   return(sample(c(rep(0, nunits/2), rep(1, nunits/2))))
 }
 
-population.rerandomize <- function(pop, no.singles) {
+population.rerandomize <- function(pop) {
   N = population.size(pop)
   CHECK_TRUE(N %% 2==0, msg="better to have even number of units")
+  # New randomization.
   z.new = sample.z(N)
   
   # 1. Update the Z vector
@@ -103,14 +115,13 @@ population.rerandomize <- function(pop, no.singles) {
   pop$obs$Z <- z.new
   
   # 2. Update the observed types.
-  new.types <- rep(NA, N)
   true.types = population.types.com(pop)
-  pop$obs$types <- observed.types(true.types, z.new, no.singles=no.singles)
+  pop$obs$types <- observed.types(true.types, z.new, 
+                                  no.singles=pop$kNoSingles)
   
   # 3. Update the observed Y
   pop$obs$Y <- population.treatment.outcomes(pop, z.new)
   
-  pop$kNoSingles = no.singles
   return(pop)
 }
 
@@ -125,8 +136,8 @@ new.population <- function(nUnits, singles.pct=0.0) {
   
   pop = list(com=list(types=types, Yall=Yall, Z=z),
              obs=list(types=empty, Z=empty, Y=empty))
-  
-  pop <- population.rerandomize(pop, no.singles=(singles.pct==0))
+  pop$kNoSingles = (singles.pct==0)
+  pop <- population.rerandomize(pop)
   CHECK_population(pop)
   return(pop)
 }
