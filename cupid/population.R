@@ -43,7 +43,7 @@ population.treatment.outcomes <- function(pop, z) {
   units = population.all.units(pop)
   N = length(units)
   CHECK_EQ(length(z), length(units)) # make sure z has the correct length
-  CHECK_MEMBER(z, c(0, 1)) # check if treatment is binary
+  CHECK_MEMBER(z, c(0, 1), msg="treatment should be binary") # check if treatment is binary
   
   all.types = population.types.com(pop)
   males = types.males(all.types)
@@ -60,8 +60,8 @@ population.treatment.outcomes <- function(pop, z) {
   Lindex.other = other.r + N * (other.c-1)
   
   y = rep(NA, N)
-  y[males] = pop$com$Yall$males[Lindex.male]
-  y[other] = pop$com$Yall$other[Lindex.other]
+  y[males] <- pop$com$Yall$males[Lindex.male]
+  y[other] <- pop$com$Yall$other[Lindex.other]
 
   CHECK_TRUE(sum(is.na(y))==0)
   return(y)
@@ -111,8 +111,16 @@ sample.z <- function(nunits) {
 }
 
 population.rerandomize <- function(pop) {
+  # Samples a new treatment(z) for the population 
+  # and the uses the potential outcomes matrix to update the 
+  # observed values Yobs, and the true types to update the observed
+  # unit types.
+  #
+  # Returns: A new population object.
+  # Note: No sampling is performed for the new outcomes Y. These 
+  # have been sampled fully when the population was created.
+  #
   N = population.size(pop)
-  CHECK_TRUE(N %% 2==0, msg="better to have even number of units")
   # New randomization.
   z.new = sample.z(N)
   
@@ -150,9 +158,9 @@ new.population <- function(nUnits, singles.pct=0.0) {
 
 plot.population <- function(pop) {
   par(mfrow=c(2, 1))
-  par(mar=rep(0.5, 4))
-  plot.types(pop, plot.obs=T)
+  par(mar=rep(1, 4))
   plot.types(pop, plot.obs=F)
+  plot.types(pop, plot.obs=T)
 }
   
 
@@ -205,4 +213,9 @@ CHECK_population <- function(pop) {
   y.obs = population.Y.obs(pop)
   y.obs.valid = population.treatment.outcomes(pop, z=z)                                        
   CHECK_TRUE(all(y.obs==y.obs.valid))
+}
+
+test.population <- function() {
+  # TODO(ptoulis): Add some tests here.
+  pop = new.population(10)
 }

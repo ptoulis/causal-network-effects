@@ -7,8 +7,13 @@
 #     t[i] = NA, we "do not know the type"
 #     t[i] = 0, this is a male
 sample.types <- function(nunits, singles.pct=0) {
-  # Current model: 100% females/males  
+  # Samples a vector of types following the convention shown above.
+  #
+  # Args: nunits = #units(=N)
+  #       singles.pct = proportion (0-1) of the singles in the population
+  # Returns: Vector (Nx1) of types.
   all = 1:nunits
+  CHECK_INTERVAL(singles.pct, min=0, max=1)
   nsingles = as.integer(nunits * singles.pct)
   is.even = function(x) x%%2==0
   nsingles = ifelse(is.even(nunits-nsingles), nsingles, nsingles+1)
@@ -34,7 +39,8 @@ types.na <- function(types) which(is.na(types))
 types.females <- function(types) {
   not.na = setdiff(1:length(types), types.na(types))
   # females = all_not_NA - males - singles
-  setdiff(not.na, union(types.males(types), types.singles(types)))
+  possible.female = which(types!=1:length(types) & types!=0)
+  intersect(not.na, possible.female)
 }
 
 types.male.match <- function(types, females) {
@@ -57,7 +63,6 @@ types.female.match <- function(types, males) {
   return(f)
 }
 
-
 observed.types <- function(true.types, z, no.singles=F) {
   # Given the set of types and assignment, it defines what are the observed types.
   #  If there are singles, the only observed types are for those m/f pairs
@@ -66,7 +71,15 @@ observed.types <- function(true.types, z, no.singles=F) {
   #   but their females are in control.
   #
   # TODO(ptoulis): Add checks?
-  CHECK_TRUE(sum(is.na(true.types))==0, msg="No NA types allowed.")
+  # TODO(ptoulis): This is incomplete. We can infer that some nodes are singles
+  #   for example, if they are treated and there are no unidentified 
+  #   nodes in the control.
+  #
+  # WARNING(ptoulis): Use this function with caution. It is not perfected yet.
+  #   
+  CHECK_types(true.types)
+  CHECK_notNA(true.types, msg="True types have no NAs")
+  # vector of observed types.
   obs.t = rep(NA, length(true.types))
   # 1. Observe treated females.
   treated.f <- intersect(types.females(true.types), which(z==1))
@@ -79,11 +92,10 @@ observed.types <- function(true.types, z, no.singles=F) {
     ## more types are observed under the assumption of no singles.
     CHECK_TRUE(length(types.singles(true.types))==0, msg="Should have no singles.")
     treated = which(z==1)
-    treated.m.with.treated.f = intersect(m.with.treated.f, treated)
-    fm = union(treated.f, treated.m.with.treated.f)
-    CHECK_MEMBER(fm, treated)
-    m.with.control.f = setdiff(treated, fm)
-    obs.t[m.with.control.f] <- 0
+    control.females = intersect(which(z==0), types.females(true.types))
+    treated.m.with.control.f = intersect(which(z==1),
+                                         types.male.match(true.types, control.females))
+    obs.t[treated.m.with.control.f] <- 0
   }
   return(obs.t)
 }
@@ -142,32 +154,10 @@ plot.types <- function(pop, plot.obs=F) {
   
 }
 
-test.types <- function() {
-  # Units from 1...N
-  all = c(4, 5, 6, 0, 0, 0, 7, 8, NA, NA)
-  
-  N = length(all)
-  # print(all)
-  CHECK_SETEQ(c(1,2,3), types.females(all))
-  CHECK_SETEQ(c(4,5,6), types.males(all))
-  CHECK_SETEQ(c(4, 6), types.male.match(all, females = c(1, 3)))
-  CHECK_SETEQ(c(7, 8), types.singles(all))
-  print(sprintf("Checked population of %d Units: [OK]", N))
-  
-  # Check sampling
-  N  = 4 * rpois(1, lambda=8)
-  all = sample.types(N, singles.pct = 0.3)
-  f = types.females(all)
-  m.match = types.male.match(all, f)
-  # Checks whether   all males == match(all females)
-  CHECK_SETEQ(m.match, types.males(all))
-  f.sample = sample(f, size=length(f)/2, replace=F)
-  # Checks the identity match(match(females)) = females
-  CHECK_SETEQ(f.sample, types.female.match(all, types.male.match(all, f.sample)))
-  print(sprintf("Checked matches consistency on  %d Units: [OK]", N))
-}
-
 CHECK_types <- function(types) {
+  # Checks whether the values in the vector are valid.
+  CHECK_MEMBER(types[!is.na(types)], 0:length(types), msg="Correct values")
+  
   # Checks whether this type object is self-consistent.
   m = types.males(types)
   f = types.females(types)
@@ -178,14 +168,13 @@ CHECK_types <- function(types) {
   CHECK_DISJOINT(f, s)
   # same number of males and females.
   CHECK_EQ(length(m), length(f))
-  # f+m+s should be a subset of all units (no "weird" values)
-  CHECK_MEMBER(union(m, union(s, f)), 1:length(types))
+  
   # male indicator is 0
   CHECK_SETEQ(types[m], c(0))
   # check that matches(all f) = all m
   CHECK_SETEQ(types.male.match(types, f), m)
   # check match(match(f)) = f
-  CHECK_SETEQ(types.female.match(types,  types.male.match(types, f)), f)
+  CHECK_identical(types.female.match(types,  types.male.match(types, f)), f)
 }
 
 CHECK_consistent_types <- function(types.com, types.obs, z, no.singles) {
