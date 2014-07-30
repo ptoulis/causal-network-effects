@@ -9,6 +9,7 @@ source("../../r-toolkit/checks.R")
 # - new.population(N, singles) -- creates a new population
 # - population.filter(pop) -- returns the units with the specified search criteria.
 # - population.Yobs(pop, Y) -- returns what portion of the PO (Y) will be observed.
+# - population.types.obs(pop) -- returns the vector of observed types
 
 kTypes = c("F", "M", "S")
 kTypesHaveMatches = c("F", "M")
@@ -53,22 +54,46 @@ new.population <- function(N, single.pct=0) {
   M$match.z[females] <- M$z[males]
  return(M) 
 }
+population.no.singles <- function(pop) {
+  nrow(subset(pop, type=="S"))==0
+}
 
 population.filter <- function(pop, 
                               is.type=c(kTypes), 
                               has.treatment=c(0, 1), 
-                              match.treatment=c(0, 1),
-                              obs=T) {
+                              match.treatment=c(0, 1)) {
   # Returns those unit ids that have the specified type,
   # and treatment and their match (spouse) has the specified treatment.
+  #
+  # WARNING: This is using information that might not be observed.
+  # For example, the type or the match assignment are not always observed.
   if(identical(is.type, c("S")) & !identical(match.treatment, has.treatment)) {
     warning("Querying for single will sent match.z == z in the filter criteria")
     match.treatment = has.treatment
   }
-  subset(pop, (type %in% is.type) & (z %in% has.treatment) & (match.z %in% match.treatment))$id
+  units = subset(pop, (type %in% is.type) & (z %in% has.treatment) & (match.z %in% match.treatment))$id 
+  return(units)
 }
 
-population.observed.types <- function(pop, no.singles) {
+population.obs <- function(pop) {
+  # Returns the observed population.
+  types.obs = population.types.obs(pop)
+  pop.obs = pop
+  pop.obs$type = types.obs
+  na.types = which(is.na(types.obs))
+  pop.obs[na.types, c("match.id", "match.type", "match.z")] <- NA
+  # EXCEPTION:
+  # If a male is treated and we know its type, but its female is not
+  # we probably do not know its matched female
+  treated.m.control.f = population.filter(pop, is.type="M", has.treatment = 1, match.treatment = 0)
+  ided.treat.m.control.f = intersect(treated.m.control.f, which(!is.na(types.obs)))
+  if(length(ided.treat.m.control.f) > 0) {
+    pop.obs[ided.treat.m.control.f, c("match.id", "match.type", "match.z")] <- NA
+  }
+  return(pop.obs)
+}
+
+population.types.obs <- function(pop) {
   # Given the set of types and assignment, it defines what are the observed types.
   #  If there are singles, the only observed types are for those m/f pairs
   #  where the female is treated.
@@ -93,10 +118,7 @@ population.observed.types <- function(pop, no.singles) {
   m.with.treated.f <- population.filter(pop, is.type = "M", match.treatment = 1)
   obs.t[m.with.treated.f] <- true.types[m.with.treated.f]
   
-  if(no.singles) {
-    ## more types are observed under the assumption of no singles.
-    CHECK_TRUE(length(population.filter(pop, is.type = "S")) == 0, 
-               msg="Asked for no.singles but there are singles")
+  if(population.no.singles(pop)) {
     treated.m.with.control.f = population.filter(pop, is.type = "M", 
                                                  has.treatment = 1,
                                                  match.treatment = 0)
@@ -140,9 +162,10 @@ population.Yobs <- function(pop, Y) {
 sample.Y <- function(pop) {
   # Sample potential outcomes
   # TODO(ptoulis): These need to be sampled according to a hypothesis.
+  # Effects are listed as (baseline-primary)
   effects = list("F"=c(1, 2.75), "M"=c(0.5, 1.5), "S"=c(0.35, 0.1))
   effects.se = list("F"=c(1.0), "M"=c(0.7), "S"=c(0.25))
-  kCupidEffect = 4
+  kCupidEffect = 1.15
   
   Y = matrix(NA, nrow=nrow(pop), ncol=4)
   # columns correspond to (0, 0), (0, 1), (1, 0) and (1, 1) for males.
@@ -153,7 +176,8 @@ sample.Y <- function(pop) {
     nUnits = length(units.type)
     se = effects.se[[type]]
     baseline = effects[[type]][1]
-    primary = effects[[type]][1] + effects[[type]][2]
+    primary =  effects[[type]][2]
+   # print(sprintf("Sampling Y: type=%s baseline=%.2f, primary=%.3f", type, baseline, primary))
     if(type=="M") {
       Y[units.type, 1] <- rnorm(nUnits, mean=baseline, sd=se)
       Y[units.type, 2] <- rnorm(nUnits, mean=baseline + kCupidEffect, sd=se)
@@ -185,7 +209,7 @@ population.colors <- function(pop, ref.types) {
   }
   return(cols)
 }
-plot.types <- function(pop, no.singles=T, plot.obs=F) {
+plot.types <- function(pop, plot.obs=F) {
   require(igraph)
   adjlist = list()
   units = pop$id
@@ -199,16 +223,16 @@ plot.types <- function(pop, no.singles=T, plot.obs=F) {
   g = graph.adjlist(adjlist, mode = c("out"), duplicate = TRUE)
   V(g)$name = sapply(units, function(i) sprintf("%d(%d)", i, pop$z[i]))
   if(plot.obs) {
-    V(g)$color =population.colors(pop, population.observed.types(pop, no.singles = no.singles))
+    V(g)$color =population.colors(pop, population.types.obs(pop))
     plot(g, vertex.size=300/length(units), main="Observed")  
   } else {
     V(g)$color = population.colors(pop, pop$type)
     plot(g, vertex.size=300/length(units), main="Complete")
   }
 }
-plot.population <- function(pop, no.singles=T) {
+plot.population <- function(pop) {
   par(mfrow=c(2, 1))
   par(mar=rep(1, 4))
-  plot.types(pop, no.singles=no.singles, plot.obs=F)
-  plot.types(pop, no.singles=no.singles, plot.obs=T)
+  plot.types(pop, plot.obs=F)
+  plot.types(pop, plot.obs=T)
 }
