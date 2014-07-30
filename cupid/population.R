@@ -1,14 +1,14 @@
-## population.R
+# Copyright 2013 Panos Toulis, Donald B. Rubin
+# Author: Panos Toulis(ptoulis@fas.harvard.edu)
+#
 rm(list=ls())
 source("../../r-toolkit/checks.R")
 
 #      
 # Critical functions
-# - population.treatment.outcomes(pop, z) : Given the specified assignment 
-#     it will read the correct potential outcomes from the Yall matrix of POs.
-# - population.rerandomize(pop) : It will draw a new Z for the same PO
-#      and update the observed portion of the population.
-# - population.filter(pop, ..) : Will return the units that match the criteria.
+# - new.population(N, singles) -- creates a new population
+# - population.filter(pop) -- returns the units with the specified search criteria.
+# - population.Yobs(pop, Y) -- returns what portion of the PO (Y) will be observed.
 
 kTypes = c("F", "M", "S")
 kTypesHaveMatches = c("F", "M")
@@ -167,7 +167,7 @@ sample.Y <- function(pop) {
   return(Y)
 }
 
-
+# Drawing stuff for visualization
 population.colors <- function(pop, ref.types) {
   all.cols <- c("pink", "red", 
                 rgb(0, 0.1, 0.7, 0.15), rgb(0, 0.1, 0.7, 0.65),

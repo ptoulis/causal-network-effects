@@ -1,3 +1,6 @@
+# Copyright 2013 Panos Toulis, Donald B. Rubin
+# Author: Panos Toulis(ptoulis@fas.harvard.edu)
+#
 # Simple examples demonstrating the functionality of the code.
 
 source("population.R")
