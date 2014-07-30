@@ -21,8 +21,18 @@ posterior.mean <- function(y1, y0) {
     return(lik.male + like.female)
   }
   
-  sample.par <- function(t0.imp) {
-    # TODO
+  sample.par <- function(t0.imp, par) {
+    CHECK_TRUE(length(t0.imp) == length(y0))
+    males = which(t0.imp=="M")
+    females = which(t0.imp=="F")
+    if(length(males) != length(females)) {
+      return(-Inf) # M-F females should have equal numbers.
+    }
+    
+    y.males = c(y1, y0[males])
+    y.females = y0[females]
+    
+    mu.male = rnorm(1, mean=mean(y.males), sd=)
   }
   
   complete.data.estimate <- function(t0.imp) {
@@ -39,15 +49,22 @@ posterior.mean <- function(y1, y0) {
   }
   
   t0.old = sample.types()
+  par.old = list(mu.male=mean(y1), sigma.male=sd(y1),
+                 mu.female=mean(y0), sigma.female=sd(y0))
   nacc = 0
   estimates = c()
   for(i in 1:1000) {
     t0.new = sample.types()
-    log.acc = min(0, log.com.conditional(t0.new) - log.com.conditional(t0.old))
+    # 1. Draw types from the conditional distribution
+    #    Update t0.old
+    log.acc = min(0, log.com.conditional(t0.new, par.old) - 
+                     log.com.conditional(t0.old, par.old))
     if(runif(1) < exp(log.acc)) {
       t0.old = t0.new
       nacc = nacc + 1
     }
+    # 2. Draw from the posterior conditional of par
+    
     estimates = c(estimates, complete.data.estimate(t0.old))
   }
   return(tail(estimates, 0.9 * length(estimates)))
