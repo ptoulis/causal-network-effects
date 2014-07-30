@@ -6,6 +6,7 @@
 #     t[i] = i then i = single
 #     t[i] = NA, we "do not know the type"
 #     t[i] = 0, this is a male
+
 sample.types <- function(nunits, singles.pct=0) {
   # Samples a vector of types following the convention shown above.
   #
@@ -59,8 +60,12 @@ types.female.match <- function(types, males) {
   all.m <- types.males(types)
   CHECK_MEMBER(males, all.m, msg="Should be subset of all males")
   f = match(males, types)
-  CHECK_TRUE(sum(is.na(f))==0, msg="No NAs")
-  return(f)
+  # CHECK_TRUE(sum(is.na(f))==0, msg="No NAs")
+  # There is a NA when a male was not found in the list.
+  # This happens only when a treated unit is identified as male
+  # UNDER the assumption of no singles, but his match cannot be identified in the 
+  # control group.
+  return(f[!is.na(f)])
 }
 
 observed.types <- function(true.types, z, no.singles=F) {
@@ -125,11 +130,11 @@ type.colors <- function(types, z=rep(NA, length(types))) {
 plot.types <- function(pop, plot.obs=F) {
   require(igraph)
   adjlist = list()
-  types = population.types.com(pop)
+  types = population.types(pop, obs=F)
   units = population.all.units(pop)
   z = population.treatment(pop)
   
-  if(plot.obs) types = population.types.obs(pop)
+  if(plot.obs) types = population.types(pop, obs=T)
   
   f = types.females(types)
   m = types.males(types)

@@ -8,24 +8,16 @@ pop = new.population(50000, singles.pct = 0.2)
 pop = population.rerandomize(pop)
 
 # compute treatment effect for units in treatment-units control
-y.obs = population.Y.obs(pop)
-z = population.treatment(pop)
-treated = which(z==1)
-control = which(z==0)
-print(sprintf("Average effect %.2f", mean(y.obs[treated]) - mean(y.obs[control])))
+y.obs = population.Y(pop, obs=T)
 
-# get inteference effect
-warning("Interference effect: Using unobserved data for that.")
-all.types = population.types.com(pop)  # complete types (unobserved)
-# get the males in control i.e., Y(0, *)
-control.males = intersect(which(z==0), types.males(all.types))
-# get their matched females.
-match.females = types.female.match(all.types, control.males)
-control.match.females = intersect(which(z==0), match.females)
-# Get control males with control matched females
-# i.e. Y(0, 0)
-males.00 = types.male.match(all.types, control.match.females)
-males.01 = types.male.match(all.types, setdiff(match.females, control.match.females))
+males.00 = population.filter(pop, is.type = "m", has.treatment = 0, match.treatment = 0,
+                             obs=F)
+males.01 = population.filter(pop, is.type="m", has.treatment = 0, match.treatment = 1,
+                             obs=F)
 
-print(sprintf("Interference effect=%.2f", mean(y.obs[males.01]) - mean(y.obs[males.00])))
+print(sprintf("Cupid effect=%.2f", mean(y.obs[males.01]) - mean(y.obs[males.00])))
 
+# Primary females effect
+females.1 = population.filter(pop, is.type="f", has.treatment=1)
+females.0 = population.filter(pop, is.type="f", has.treatment = 0, obs=F)
+print(sprintf("Primary female effect=%.2f", mean(y.obs[females.1]) - mean(y.obs[females.0])))
