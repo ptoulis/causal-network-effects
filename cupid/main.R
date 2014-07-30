@@ -10,8 +10,10 @@ pop = population.rerandomize(pop)
 # compute treatment effect for units in treatment-units control
 y.obs = population.Y(pop, obs=T)
 
+# control males w/ control spouses.
 males.00 = population.filter(pop, is.type = "m", has.treatment = 0, match.treatment = 0,
                              obs=F)
+# control males w/ treated spouses.
 males.01 = population.filter(pop, is.type="m", has.treatment = 0, match.treatment = 1,
                              obs=F)
 
