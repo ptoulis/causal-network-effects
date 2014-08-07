@@ -95,25 +95,27 @@ perturb.types <- function(tc.imp, depth=2) {
   return(perturb.types(tc.imp, depth-1))
 }
 
-generate.data <- function(Nt, Nc) {
+generate.data <- function(Nt, Nc, cupid.effect) {
   # Generates a data object
   #
-  mu.m = 3.5  # male mean
-  mu.f = 5.5  # female mean
-  se.m = 1.5
-  se.f = 2.5
+  mu.male.c =  3.5  # male mean control
+  mu.male.t = mu.male.c + cupid.effect  # male mean
+ 
+  mu.f = 5.8  # female mean
+  se.m = 2.0 ## keep it the same?
+  se.f = 3.5
   
   par(mfrow=c(1, 1))
   # Sample male outcomes.
-  Yt = rnorm(Nt, mean=mu.m, sd=se.m)
-  Yc = rnorm(Nc, mean=mu.m, sd=se.m)
+  Yt = rnorm(Nt, mean=mu.male.t, sd=se.m)
+  Yc = rnorm(Nc, mean=mu.male.c, sd=se.m)
   # Sample female outcomes.
   tc.true = random.types(Nc)
   
   females = which(tc.true=="F")
   Yc[females] = rnorm(length(females), mean=mu.f, sd=se.f)
 
-  return(list(Yt=Yt, Yc=Yc, tc.true=tc.true))
+  return(list(Yt=Yt, Yc=Yc, tc.true=tc.true, true.CACE=mu.male.t-mu.male.c))
 }
 
 #### TESTING.
@@ -204,41 +206,143 @@ mcmc.mh <- function(data, niters=1000, verbose=T) {
   return(tail(est, 0.2 * length(est)))
 }
 
-
-new.statistic.mcmc <- function(data, niters=1000) {
+EM.data <- function(data, tol=1e-2, maxIters=1000, verbose=F) {
+  ## Computes MLE estimate of CACE for a simple normal model.
+  ## (assumes common variance)
+  # 
+  # data = (Yt, Yc) where Yt = outcomes of Treated males.
+  #                       Yc = outcomes of males or females
   Yt = data$Yt
+  Nt = length(Yt)
   Yc = data$Yc
-  K = length(Yc)
-  
-  types = random.types(length(Yc))
-  par = init.par(data)
-  est = c()
-  types.matrix = matrix(NA, nrow=niters, ncol=K)
-  
-  for(iter in 1:niters) {
-    #male probs = Prob(Data | Ci=m, C-i)
-    Pd.male = dnorm(Yc, mean=par$mu.male, sd=par$sigma.male)
-    Pd.female = dnorm(Yc, mean=par$mu.female, sd=par$sigma.female)
-    male.probs = Pd.male / (Pd.male + Pd.female)
-    male.ind = rbinom(K, size=1, prob=male.probs)
-    # Relaxed Gibbs for types
-    types = rep("F", K)
-    types[which(male.ind==1)] <- "M"
-    types.matrix[iter, ] <- types=="M"
-    # Sample parameter
-    par = sample.par(data, tc.imp = types, par.old = par)
+  #        T:male   C:male-mean   C:male-sd   C:female     C:female-sd
+  # par = ( mu1t,     mu1c,         ms1,        mu0, s0)
+ 
+  get.Q <- function(par.old) {
+    # Returns Q(theta, theta_t)
+    mu.male.t = par.old[1]
+    mu.male.c = par.old[2]
+    sigma.male = par.old[3]
+    mu.female.c = par.old[4]
+    sigma.female.c = par.old[5]
     
-    # new estimate
-    est = c(est, complete.data.estimate(data, types))
+    male.lik = dnorm(Yc, mean=mu.male.c, sd=sigma.male)
+    female.lik = dnorm(Yc, mean=mu.female.c, sd=sigma.female.c)
+    Ci.imp = male.lik / (male.lik + female.lik)  # impute expected.
+    
+    Q <- function(par.new) {
+      mu.male.t = par.new[1]
+      mu.male.c = par.new[2]
+      sigma.male = par.new[3]
+      mu.female.c = par.new[4]
+      sigma.female.c = par.new[5]
+      
+      dnorm(mean(Yt), mean=mu.male.t, sd=sigma.male / sqrt(Nt), log=T) + 
+        sum(Ci.imp * dnorm(Yc, mean=mu.male.c, sd=sigma.male, log=T)) + 
+          sum((1-Ci.imp) * dnorm(Yc, mean=mu.female.c, sd=sigma.female.c, log=T))
+    }
+    return(Q)
   }
   
-  avg.types = as.numeric(colMeans(types.matrix) > 0.5) + 1
-  avg.types = c("F", "M")[avg.types]
-  print(table(avg.types))
-  print(sprintf("Correct %.1f%%", 100 * length(which(avg.types==data$tc.true)) / K))
-  return(tail(est, 0.2 * length(est)))
+  ## Iterate.
+  par = c(mean(Yt), mean(Yc), sd(Yt), mean(Yc), sd(Yc)) # current estimate
+  
+  for(i in 1:maxIters) {
+    # E-step
+    Q = get.Q(par)
+    # M-step
+    par.old = par
+    par = optim(par = par.old, fn = Q, lower=c(-Inf, -Inf, 1e-5, -Inf, 1e-5),
+                method="L-BFGS-B", control=list(fnscale=-1))$par
+    if(verbose)
+      print(sprintf("Iteration %d/%d : Params=%s", i, maxIters, paste(round(par, 3), collapse=", ")))
+    
+    if(sum(abs(par - par.old)) < tol)
+      return(par)
+  }
+  return(par)
 }
 
+test.EM <- function() {
+  data = generate.data(500, 900)
+  par = EM.CACE(data, tol=1e-5, maxIters = 1000, verbose = T)
+  print(sprintf("MLE of CACE=%.3f -- True = %.3f", 
+                par[1]-par[2],
+                data$true.CACE))
+}
 
+##  Do inference.
+impute.types <- function(data) {
 
+  par.mle = EM.data(data, verbose=F)
+  
+  mu.male.c = par.mle[2]
+  sigma.male = par.mle[3]
+  mu.female.c = par.mle[4]
+  sigma.female.c = par.mle[5]
+  
+  Yc=  data$Yc
+  male.lik = dnorm(Yc, mean=mu.male.c, sd=sigma.male)
+  female.lik = dnorm(Yc, mean=mu.female.c, sd=sigma.female.c)
+  Ci.prob = male.lik / (male.lik + female.lik)  # impute expected.
+  Ci = as.numeric(runif(length(Yc)) < Ci.prob)
+  tc.imp = c("F", "M")[Ci + 1]
+  # print(correct.types.ratio(data, tc.imp))
+  CHECK_TRUE(length(tc.imp)==length(Yc))
+  return(tc.imp)
+}
 
+rerandomize.data <- function(data, tc.imp) {
+
+  Yt.old = data$Yt
+  Yc.old = data$Yc
+  CHECK_MEMBER(tc.imp, c("F", "M"))
+  males = which(tc.imp=="M")
+  females = which(tc.imp=="F")
+  Y.males = c(Yt.old, Yc.old[males])
+  Y.females = Yc.old[females]
+  
+  # index = (1, 1, 1, ... 0, 0, 0...)  first are males in T and so on.
+  index = c(rep(1, length(Yt.old)), rep(0, length(males)))
+  # 1. Shuffle males.
+  new.index = sample(index)
+  treated.males = which(new.index==1)
+  control.males = which(new.index==0)
+  
+  Yt.new <- c(Y.males[treated.males])
+  Yc.new <- c(Y.males[control.males], Y.females)
+  CHECK_TRUE(length(Yc.new)==length(Yc.old))
+  CHECK_TRUE(length(Yt.new)==length(Yt.old))
+  
+  
+  return(list(Yt=Yt.new, Yc=Yc.new))
+}
+
+run.most.powerful.test <- function(data, niters=100, verbose=F) {
+  original.data = data
+  get.effect <- function(par) par[1]-par[2]
+  
+  S.obs = get.effect(EM.data(original.data))
+  S <- c()
+  info.times = seq(1, niters, length.out=10)
+  for(i in 1:niters) {
+    types.imputed = impute.types(data)
+    data = rerandomize.data(data, types.imputed)
+    S.new.obs = get.effect(EM.data(data))
+    S <- c(S, S.new.obs >= S.obs)
+    if(verbose)
+      print(sprintf("i=%d/%d p-value=%.3f S.new=%.2f S.obs=%.2f", 
+                    i, niters, mean(S), S.new.obs, S.obs))
+  }
+   return(mean(S))
+}
+
+plot.pvalues <- function(cupid.effect) {
+  pvals = c()
+  for(j in 1:100) {
+    d = generate.data(Nt=200, Nc=350, cupid.effect = cupid.effect)
+    pvals = c(pvals, run.most.powerful.test(d, niters = 50, verbose = T))
+    hist(pvals)
+  }
+  hist(pvals)
+}

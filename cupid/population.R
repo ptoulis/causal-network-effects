@@ -54,25 +54,69 @@ new.population <- function(N, single.pct=0) {
   M$match.z[females] <- M$z[males]
  return(M) 
 }
+
+population.rerandomize <- function(pop) {
+  N = nrow(pop)
+  new.z = sample(c(rep(0, N/2), rep(1, N/2)))
+  
+  pop$z = new.z
+  pop$match.z = new.z  # covers singles
+  
+  # Update males match z
+  males = subset(pop, type=="M")$id
+  CHECK_identical(males, population.filter(pop, is.type="M"))
+  spouses = pop$match.id[males]
+  pop$match.z[males] <- new.z[spouses]
+  
+  # Update females match z
+  females = subset(pop, type=="F")$id
+  CHECK_identical(females, population.filter(pop, is.type="F"))
+  spouses = pop$match.id[females]
+  pop$match.z[females] <- new.z[spouses]
+  
+  return(pop)
+}
+
+population.impute.types <- function(pop, y.obs) {
+  # Imputes the missing types(male, female) in this population
+  # under a null hypothesis of no interference effects.
+  num.na = length(which(is.na(pop$type)))
+  if(num.na==0) {
+    warning("There are no missing values for the types in this population.")
+    return(pop)
+  } else {
+    
+  }
+}
+
 population.no.singles <- function(pop) {
   nrow(subset(pop, type=="S"))==0
 }
 
 population.filter <- function(pop, 
-                              is.type=c(kTypes), 
-                              has.treatment=c(0, 1), 
-                              match.treatment=c(0, 1)) {
+                              is.type=c("*"),
+                              has.treatment=c("*"), 
+                              match.treatment=c("*")) {
   # Returns those unit ids that have the specified type,
   # and treatment and their match (spouse) has the specified treatment.
   #
   # WARNING: This is using information that might not be observed.
   # For example, the type or the match assignment are not always observed.
   if(identical(is.type, c("S")) & !identical(match.treatment, has.treatment)) {
-    warning("Querying for single will sent match.z == z in the filter criteria")
+    warning("Querying for single will send match.z == z in the filter criteria")
     match.treatment = has.treatment
   }
-  units = subset(pop, (type %in% is.type) & (z %in% has.treatment) & (match.z %in% match.treatment))$id 
-  return(units)
+  units = pop
+  if(!identical(is.type, c("*"))) {
+    units = subset(units, (type %in% is.type))
+  }
+  if(!identical(has.treatment, c("*"))) {
+    units = subset(units, (z %in% has.treatment))
+  }
+  if(!identical(match.treatment, c("*"))) {
+    units = subset(units, (match.z %in% match.treatment))
+  }
+  return(units$id)
 }
 
 population.obs <- function(pop) {
@@ -165,7 +209,7 @@ sample.Y <- function(pop) {
   # Effects are listed as (baseline-primary)
   effects = list("F"=c(1, 2.75), "M"=c(0.5, 1.5), "S"=c(0.35, 0.1))
   effects.se = list("F"=c(1.0), "M"=c(0.7), "S"=c(0.25))
-  kCupidEffect = 1.15
+  kCupidEffect = 1.96
   
   Y = matrix(NA, nrow=nrow(pop), ncol=4)
   # columns correspond to (0, 0), (0, 1), (1, 0) and (1, 1) for males.
