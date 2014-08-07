@@ -341,7 +341,7 @@ plot.pvalues <- function(cupid.effect) {
   pvals = c()
   for(j in 1:100) {
     d = generate.data(Nt=200, Nc=350, cupid.effect = cupid.effect)
-    pvals = c(pvals, run.most.powerful.test(d, niters = 50, verbose = T))
+    pvals = c(pvals, run.most.powerful.test(d, niters = 100, verbose = F))
     hist(pvals)
   }
   hist(pvals)
