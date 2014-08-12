@@ -323,6 +323,9 @@ run.most.powerful.test <- function(data, niters=100, verbose=F) {
   get.effect <- function(par) par[1]-par[2]
   
   S.obs = get.effect(EM.data(original.data))
+  if(verbose) {
+    print(sprintf("Observed test statistic = %.3f", S.obs))
+  }
   S <- c()
   info.times = seq(1, niters, length.out=10)
   for(i in 1:niters) {
@@ -337,9 +340,9 @@ run.most.powerful.test <- function(data, niters=100, verbose=F) {
    return(mean(S))
 }
 
-plot.pvalues <- function(cupid.effect) {
+plot.pvalues <- function(cupid.effect, num.pvalues=100) {
   pvals = c()
-  for(j in 1:100) {
+  for(j in 1:num.pvalues) {
     d = generate.data(Nt=200, Nc=350, cupid.effect = cupid.effect)
     pvals = c(pvals, run.most.powerful.test(d, niters = 100, verbose = F))
     hist(pvals)
