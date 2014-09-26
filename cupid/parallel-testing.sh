@@ -8,4 +8,4 @@
 #SBATCH -n 1 #Number of cores
 #SBATCH -N 1 #All cores on one machine
 
-Rscript main-odyssey.R 200
+Rscript main-odyssey.R 2.5 100
