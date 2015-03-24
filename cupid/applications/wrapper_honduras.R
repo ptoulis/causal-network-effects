@@ -5,7 +5,7 @@
 #
 #
 rm(list=ls())
-load("Honduras_Ed_Panos_3.RData")
+load("honduras.RData")
 
 library(igraph)
 
@@ -30,9 +30,12 @@ kRelations = c("Spouse", "Sibling", "Friend")
 village.data <- function(village.id) {
   # Returns the units, the social network, and the arrows.
   # 
-  # Note:
+  # Value: list(U, Y, G, A, seeds)  where
+  #   U = units, Y=outcomes, G=network, A=coupon arrows.
   units = subset(surveys.ep2, Aldea.no==village.id, select=kCovariates)
+  rownames(units) <- 1:nrow(units)
   Y = subset(surveys.ep2, Aldea.no==village.id, select=kOutcome)
+ rownames(Y) <- 1:nrow(Y)
   G = subset(all.nets[[village.id]], Nt.type %in% kRelations, select=kNetworkFeatures)
   A = subset(all.nets[[village.id]], Nt.type == kCouponType & Wave <= 2, select=c(kNetworkFeatures))
   
@@ -44,12 +47,13 @@ village.data <- function(village.id) {
   names(G) <- c("sender", "receiver", "arrow.type")
   names(A) <- c("sender", "receiver", "arrow.type")
   names(Y) <- kOutcomeName
-  return(list(U=units, Y=Y, G=G, A=A, seeds=seeds))  
+  return(list(U=units, Y=as.numeric(Y[,1]), G=G, A=A, seeds=seeds))  
 }
 
 plot.villageArrows <- function(vData) {
   # Assumes it is part of the village data.
   #
+  # green=seed, color=score in the test.  gray=NA (missing value.)
   A = subset(vData$A, select=c("sender", "receiver"))
   u = vData$U$id # unit ids
   m = apply(A, 2, function(col) match(col, u))
@@ -63,8 +67,9 @@ plot.villageArrows <- function(vData) {
   sort.scores = sort(scores,  na.last = NA)
   n = length(sort.scores)
   cols = rev(heat.colors(n))
+  # Given scores, choose the color.
   vertex.colors = sapply(scores, function(x) {
-    if(is.na(x)) return(sample(cols[1:15], size=1))
+    if(is.na(x)) return("gray")
     return(cols[match(x, sort.scores)])
   })
   vertex.colors[match(vData$seeds, u)] <- "green"
