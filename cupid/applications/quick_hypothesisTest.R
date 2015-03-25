@@ -4,11 +4,16 @@
 #
 source("cupid_honduras.R")
 source("wrapper_honduras.R")
-source("../../../r-toolkit/logs.R")
-kCurrentLogLevel <- 0
-kLogToStdOut <- F
-# with(d, test.H0(Y, E, Z, X, G))
 
+#
+# Code to perform hypothesis testing for causal effects 
+# with partially-revealed interference.
+#
+# Example run.
+#   s = sanitize.village.data(village.data(2))
+#   with(s, test.H0(Y, E, Z, X, G, nreps=10))
+#
+#
 plot.state <- function(saneData) {
   # s = sanitize.village.data(village.data(village.id = 2))
   # plot.villageData(s ,plot.coupon.only =T)
@@ -225,14 +230,19 @@ test.H0 <- function(Yobs, Eobs, Zreal, X, G, nreps=100) {
     if(is.na(tobs)) {
       tobs <- Tobs
     } else {
-      tvals <- c(tvals, Tobs >= tobs)
-      print(sprintf("Tobs = %.3f  initial=%.3f Current=%.2f%%", 
-                    Tobs, tobs, 100 * mean(tvals)))
+      if(is.na(Tobs)) {
+        warning("NA value in testing.")
+      } else {
+        tvals <- c(tvals, Tobs >= tobs)
+        print(sprintf("Tobs = %.3f  initial=%.3f Current=%.2f%%", 
+                      Tobs, tobs, 100 * mean(tvals)))
+      }
     }
     
     # 3. Rerandomize
     Znew = rerandomize(Zreal, Eobs, Eimp)
-    print(which(Z.new==1))
+    print("Rerandomizing...New seeds=")
+    print(which(Znew==1))
     # 4. New outcomes
     Yobs.new = new.outcomes(Yobs, Zreal, Znew)
     
